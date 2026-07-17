@@ -16,7 +16,7 @@ path = "src/main.rs"
 # orbclient via src/orbital_platform.rs (custom slint::platform::Platform).
 # No winit: modern winit lacks the APIs slint needs on Redox, and the old
 # winit 0.28 orbital backend uses the removed legacy `event:` kernel scheme.
-slint = { version = "1.17", default-features = false, features = ["compat-1-0", "std", "renderer-software"], optional = true }
+slint = { version = "1.17", default-features = false, features = ["compat-1-0", "std", "renderer-software", "unstable-fontique-010"], optional = true }
 rusqlite = { version = "0.31", features = ["bundled"] }
 
 [features]
