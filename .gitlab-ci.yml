@@ -1,0 +1,23 @@
+# E-OS Notes CI — light tier on gitlab.com shared runners.
+# The real target build (aarch64/x86_64-unknown-redox) happens in the meta-repo
+# heavy build; here we gate formatting and a host build with the locked lockfile.
+
+stages:
+  - lint
+  - build
+
+fmt:
+  image: "rust:slim"
+  stage: lint
+  script:
+    - rustup component add rustfmt
+    - cargo fmt -- --check
+
+build-host:
+  image: "rust:latest"
+  stage: build
+  script:
+    # Slint's host (Linux) font stack needs fontconfig; the Redox target does not.
+    - apt-get update -qq && apt-get install -y -qq libfontconfig1-dev pkg-config
+    - cargo build --locked
+    - cargo run --locked -- --selftest

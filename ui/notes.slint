@@ -1,0 +1,132 @@
+// E-OS Notes — Crimson-themed notes app (Slint, software renderer).
+// Palette: deep black #0c0202, panel #160404, blood red #e50914,
+// highlight #7a0a0a, text #f2e9e9, muted #8a6f6f.
+
+import { ListView, LineEdit, TextEdit, Button } from "std-widgets.slint";
+
+export struct NoteItem {
+    id: int,
+    title: string,
+    subtitle: string,
+}
+
+export component MainWindow inherits Window {
+    title: "E-OS Notes";
+    background: #0c0202;
+    preferred-width: 900px;
+    preferred-height: 600px;
+
+    in property <[NoteItem]> notes;
+    in-out property <int> current-id: -1;
+    in-out property <string> current-title;
+    in-out property <string> current-body;
+    in property <string> status;
+    in property <bool> editor-enabled: false;
+
+    callback new-note();
+    callback delete-note();
+    callback open-note(int);
+    callback content-edited();
+    callback search-changed(string);
+
+    HorizontalLayout {
+        // ── Sidebar ──────────────────────────────────────────────
+        Rectangle {
+            width: 280px;
+            background: #160404;
+
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    LineEdit {
+                        placeholder-text: "Szukaj…";
+                        edited(text) => { root.search-changed(text); }
+                    }
+                    Button {
+                        text: "+";
+                        width: 36px;
+                        clicked => { root.new-note(); }
+                    }
+                }
+
+                ListView {
+                    for note in root.notes: Rectangle {
+                        height: 56px;
+                        background: note.id == root.current-id ? #7a0a0a : transparent;
+                        border-radius: 6px;
+
+                        TouchArea {
+                            clicked => { root.open-note(note.id); }
+                        }
+
+                        VerticalLayout {
+                            padding: 8px;
+                            spacing: 2px;
+                            Text {
+                                text: note.title == "" ? "(bez tytułu)" : note.title;
+                                color: #f2e9e9;
+                                font-size: 14px;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: note.subtitle;
+                                color: #8a6f6f;
+                                font-size: 11px;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
+
+                Button {
+                    text: "Usuń notatkę";
+                    enabled: root.editor-enabled;
+                    clicked => { root.delete-note(); }
+                }
+            }
+        }
+
+        // ── Editor ───────────────────────────────────────────────
+        Rectangle {
+            background: #0c0202;
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+
+                LineEdit {
+                    placeholder-text: "Tytuł";
+                    font-size: 18px;
+                    enabled: root.editor-enabled;
+                    text <=> root.current-title;
+                    edited(text) => { root.content-edited(); }
+                }
+
+                TextEdit {
+                    placeholder-text: "Treść notatki…";
+                    wrap: word-wrap;
+                    enabled: root.editor-enabled;
+                    text <=> root.current-body;
+                    edited(text) => { root.content-edited(); }
+                }
+
+                HorizontalLayout {
+                    Text {
+                        text: root.status;
+                        color: #8a6f6f;
+                        font-size: 11px;
+                    }
+                    Rectangle { }
+                    Text {
+                        text: "E-OS Crimson";
+                        color: #e50914;
+                        font-size: 11px;
+                    }
+                }
+            }
+        }
+    }
+}

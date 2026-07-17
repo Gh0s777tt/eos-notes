@@ -1,0 +1,26 @@
+[package]
+name = "eos-notes"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "E-OS Notes — Crimson-themed notes app (Slint UI, SQLite/WAL storage)"
+repository = "https://gitlab.com/e-os/eos-notes"
+build = "build.rs"
+
+[[bin]]
+name = "eos-notes"
+path = "src/main.rs"
+
+[dependencies]
+# The Redox-proven Slint stack: software renderer over the winit orbital
+# backend (mainline winit supports Redox/orbital natively — no patches).
+slint = { version = "1.17", default-features = false, features = ["compat-1-0", "std", "renderer-winit-software"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+[build-dependencies]
+slint-build = "1.17"
+
+[profile.release]
+# E-OS hardening baseline (matches the code forks): any unintended integer
+# overflow aborts instead of wrapping silently.
+overflow-checks = true

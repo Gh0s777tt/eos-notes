@@ -1,0 +1,6 @@
+name=E-OS Notes
+binary=/usr/bin/eos-notes
+icon=/ui/icons/apps/eos-notes.png
+category=Office
+description=Notatnik E-OS (Crimson) — Slint + SQLite/WAL
+author=E-OS
