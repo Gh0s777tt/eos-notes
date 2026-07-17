@@ -82,6 +82,10 @@ fn clear_editor(win: &MainWindow) {
 }
 
 pub fn run() {
+    #[cfg(target_os = "redox")]
+    slint::platform::set_platform(Box::new(crate::orbital_platform::OrbitalPlatform::new()))
+        .expect("eos-notes: cannot set the orbital platform");
+
     let database =
         db::Db::open(&db::default_path()).expect("eos-notes: cannot open the notes database");
     let app = Rc::new(RefCell::new(App {

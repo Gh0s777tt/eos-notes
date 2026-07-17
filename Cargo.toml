@@ -12,9 +12,11 @@ name = "eos-notes"
 path = "src/main.rs"
 
 [dependencies]
-# The Redox-proven Slint stack: software renderer over the winit orbital
-# backend (mainline winit supports Redox/orbital natively — no patches).
-slint = { version = "=1.1.1", default-features = false, features = ["compat-1-0", "std", "renderer-winit-software"], optional = true }
+# Modern Slint with the pure software renderer — E-OS drives it over
+# orbclient via src/orbital_platform.rs (custom slint::platform::Platform).
+# No winit: modern winit lacks the APIs slint needs on Redox, and the old
+# winit 0.28 orbital backend uses the removed legacy `event:` kernel scheme.
+slint = { version = "1.17", default-features = false, features = ["compat-1-0", "std", "renderer-software"], optional = true }
 rusqlite = { version = "0.31", features = ["bundled"] }
 
 [features]
@@ -23,8 +25,11 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 default = ["gui"]
 gui = ["dep:slint"]
 
+[target.'cfg(target_os = "redox")'.dependencies]
+orbclient = "0.3"
+
 [build-dependencies]
-slint-build = "=1.1.1"
+slint-build = "1.17"
 
 [profile.release]
 # E-OS hardening baseline (matches the code forks): any unintended integer
