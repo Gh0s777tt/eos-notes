@@ -78,6 +78,14 @@ fn key_text(key: &orbclient::KeyEvent) -> Option<slint::SharedString> {
 }
 
 fn run_loop(sw: Rc<MinimalSoftwareWindow>) -> Result<(), slint::PlatformError> {
+    // Orbital's session children inherit DISPLAY; a shell launch (VT console,
+    // ssh) does not have it. orbclient's window path already defaults to
+    // /scheme/orbital — give get_display_size() the same default.
+    if std::env::var_os("DISPLAY").is_none() {
+        let display =
+            std::env::var("ORBITAL_DISPLAY").unwrap_or_else(|_| "/scheme/orbital".to_string());
+        std::env::set_var("DISPLAY", display);
+    }
     let (dw, dh) = orbclient::get_display_size()
         .map_err(|e| slint::PlatformError::Other(format!("orbital display size: {e}")))?;
     let w = dw.saturating_sub(80).clamp(480, 900);
