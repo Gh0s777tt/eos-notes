@@ -14,11 +14,17 @@ path = "src/main.rs"
 [dependencies]
 # The Redox-proven Slint stack: software renderer over the winit orbital
 # backend (mainline winit supports Redox/orbital natively — no patches).
-slint = { version = "1.17", default-features = false, features = ["compat-1-0", "std", "renderer-winit-software"] }
+slint = { version = "=1.1.1", default-features = false, features = ["compat-1-0", "std", "renderer-winit-software"], optional = true }
 rusqlite = { version = "0.31", features = ["bundled"] }
 
+[features]
+# The GUI (Slint + winit orbital) is a Redox-target concern; hosts build the
+# CLI/selftest half only (winit 0.28 no longer compiles on modern host rustc).
+default = ["gui"]
+gui = ["dep:slint"]
+
 [build-dependencies]
-slint-build = "1.17"
+slint-build = "=1.1.1"
 
 [profile.release]
 # E-OS hardening baseline (matches the code forks): any unintended integer

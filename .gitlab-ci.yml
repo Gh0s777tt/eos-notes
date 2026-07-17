@@ -17,7 +17,9 @@ build-host:
   image: "rust:latest"
   stage: build
   script:
-    # Slint's host (Linux) font stack needs fontconfig; the Redox target does not.
-    - apt-get update -qq && apt-get install -y -qq libfontconfig1-dev pkg-config
-    - cargo build --locked
-    - cargo run --locked -- --selftest
+    # Hosts build the CLI/selftest half only (--no-default-features): the GUI
+    # (Slint 1.1.1 + winit 0.28, the Redox-proven pin) no longer compiles on a
+    # modern host rustc. The full GUI cross-build gate is the meta-repo heavy
+    # image build (recipes/gui/eos-notes).
+    - cargo build --locked --no-default-features
+    - cargo run --locked --no-default-features -- --selftest
