@@ -12,21 +12,18 @@ name = "eos-notes"
 path = "src/main.rs"
 
 [dependencies]
-# Modern Slint with the pure software renderer — E-OS drives it over
-# orbclient via src/orbital_platform.rs (custom slint::platform::Platform).
-# No winit: modern winit lacks the APIs slint needs on Redox, and the old
-# winit 0.28 orbital backend uses the removed legacy `event:` kernel scheme.
-slint = { version = "1.17", default-features = false, features = ["compat-1-0", "std", "renderer-software", "unstable-fontique-010"], optional = true }
+# The GUI uses Slint for the widgets; the Redox backend (software renderer over
+# orbclient) + font bootstrap live in the shared eos-ui crate.
+slint = { version = "1.17", default-features = false, features = ["compat-1-0", "std", "renderer-software"], optional = true }
+eos-ui = { git = "https://github.com/Gh0s777tt/eos-ui.git", rev = "c53180d40e5b91f15c848c4c39b1a307b14831a1", optional = true }
 rusqlite = { version = "0.31", features = ["bundled"] }
 
 [features]
-# The GUI (Slint + winit orbital) is a Redox-target concern; hosts build the
-# CLI/selftest half only (winit 0.28 no longer compiles on modern host rustc).
+# The GUI is a Redox-target concern; hosts build the CLI/selftest half only
+# (--no-default-features) — Slint's host winit backend no longer compiles on a
+# modern host rustc.
 default = ["gui"]
-gui = ["dep:slint"]
-
-[target.'cfg(target_os = "redox")'.dependencies]
-orbclient = "0.3"
+gui = ["dep:slint", "dep:eos-ui"]
 
 [build-dependencies]
 slint-build = "1.17"

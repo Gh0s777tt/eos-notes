@@ -9,8 +9,6 @@
 mod db;
 #[cfg(feature = "gui")]
 mod gui;
-#[cfg(all(feature = "gui", target_os = "redox"))]
-mod orbital_platform;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

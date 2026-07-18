@@ -81,79 +81,9 @@ fn clear_editor(win: &MainWindow) {
     win.set_editor_enabled(false);
 }
 
-/// Register the image's TTF fonts with Slint's fontique collection. Fontique
-/// has no system-font discovery on Redox, so an empty collection would panic
-/// the renderer on the first text draw; the E-OS image ships DejaVu under
-/// /usr/share/fonts (the `dejavu` package).
-#[cfg(target_os = "redox")]
-fn register_system_fonts() {
-    use slint::fontique_010::fontique;
-
-    fn collect_ttfs(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            let mut entries: Vec<_> = entries.flatten().map(|e| e.path()).collect();
-            entries.sort();
-            for path in entries {
-                if path.is_dir() {
-                    collect_ttfs(&path, out);
-                } else if path
-                    .extension()
-                    .is_some_and(|e| e.eq_ignore_ascii_case("ttf"))
-                {
-                    out.push(path);
-                }
-            }
-        }
-    }
-
-    let mut paths = Vec::new();
-    collect_ttfs(std::path::Path::new("/usr/share/fonts"), &mut paths);
-
-    let mut collection = slint::fontique_010::shared_collection();
-    let mut sans = Vec::new();
-    let mut mono = Vec::new();
-    for path in &paths {
-        let Ok(bytes) = std::fs::read(path) else {
-            continue;
-        };
-        let blob = fontique::Blob::new(std::sync::Arc::new(bytes));
-        let fonts = collection.register_fonts(blob, None);
-        let is_mono = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(|n| n.contains("Mono"));
-        for (family, _) in &fonts {
-            if is_mono {
-                mono.push(*family);
-            } else {
-                sans.push(*family);
-            }
-        }
-    }
-    if sans.is_empty() {
-        sans = mono.clone();
-    }
-    if mono.is_empty() {
-        mono = sans.clone();
-    }
-    collection.set_generic_families(fontique::GenericFamily::SansSerif, sans.iter().copied());
-    collection.set_generic_families(fontique::GenericFamily::SystemUi, sans.iter().copied());
-    collection.set_generic_families(fontique::GenericFamily::Monospace, mono.iter().copied());
-    collection.append_fallbacks(
-        fontique::FallbackKey::new(fontique::Script::from_str_unchecked("Latn"), None),
-        sans.iter().copied(),
-    );
-    if sans.is_empty() {
-        eprintln!("eos-notes: no TTF fonts found under /usr/share/fonts — text will not render");
-    }
-}
-
 pub fn run() {
-    #[cfg(target_os = "redox")]
-    slint::platform::set_platform(Box::new(crate::orbital_platform::OrbitalPlatform::new()))
-        .expect("eos-notes: cannot set the orbital platform");
-    #[cfg(target_os = "redox")]
-    register_system_fonts();
+    // Install the shared E-OS Slint-on-Orbital backend + fonts (no-op on host).
+    eos_ui::init("E-OS Notes");
 
     let database =
         db::Db::open(&db::default_path()).expect("eos-notes: cannot open the notes database");

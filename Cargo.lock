@@ -966,10 +966,19 @@ dependencies = [
 name = "eos-notes"
 version = "0.1.0"
 dependencies = [
- "orbclient",
+ "eos-ui",
  "rusqlite",
  "slint",
  "slint-build",
+]
+
+[[package]]
+name = "eos-ui"
+version = "0.1.0"
+source = "git+https://github.com/Gh0s777tt/eos-ui.git?rev=c53180d40e5b91f15c848c4c39b1a307b14831a1#c53180d40e5b91f15c848c4c39b1a307b14831a1"
+dependencies = [
+ "orbclient",
+ "slint",
 ]
 
 [[package]]
