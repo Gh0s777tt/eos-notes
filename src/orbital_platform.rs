@@ -115,6 +115,17 @@ fn run_loop(sw: Rc<MinimalSoftwareWindow>) -> Result<(), slint::PlatformError> {
 
         for event in win.events() {
             match event.to_option() {
+                // Printable characters arrive as a separate TextInput event:
+                // orbital runs the scancode through inputd's keymap, then sends
+                // the glyph here and a *cleared* (character='\0') KeyEvent below.
+                // The KeyEvent path only carries navigation/editing keys.
+                EventOption::TextInput(ti) => {
+                    if ti.character != '\0' {
+                        let text = slint::SharedString::from(ti.character);
+                        sw.dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
+                        sw.dispatch_event(WindowEvent::KeyReleased { text });
+                    }
+                }
                 EventOption::Key(key) => {
                     if let Some(text) = key_text(&key) {
                         if key.pressed {
