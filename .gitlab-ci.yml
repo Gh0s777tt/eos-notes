@@ -1,10 +1,23 @@
-# E-OS Notes CI — light tier on gitlab.com shared runners.
-# The real target build (aarch64/x86_64-unknown-redox) happens in the meta-repo
-# heavy build; here we gate formatting and a host build with the locked lockfile.
+# E-OS Notes CI.
+#
+# Three stages, and the split is not cosmetic. gitlab.com shared minutes for
+# this group run out with interruptions (meta-repo CLAUDE.md §9), so anything
+# that must be able to run at all belongs on the operator's own runner, tag
+# `eos-heavy`. The Redox image build (aarch64/x86_64-unknown-redox) is still
+# the meta-repo's job, via `recipes/gui/eos-notes` — nothing here builds it.
+#
+#   lint     — rustfmt.                                    shared runners
+#   build    — the CLI/selftest half, no windowing at all.  shared runners
+#   package  — the downloadable Windows and Linux builds.   eos-heavy
+#
+# No job carries `allow_failure` — a gate that cannot go red is decoration
+# (meta-repo CLAUDE.md §13).
 
+---
 stages:
   - lint
   - build
+  - package
 
 fmt:
   image: "rust:slim"
@@ -17,9 +30,112 @@ build-host:
   image: "rust:latest"
   stage: build
   script:
-    # Hosts build the CLI/selftest half only (--no-default-features): the GUI
-    # (Slint 1.1.1 + winit 0.28, the Redox-proven pin) no longer compiles on a
-    # modern host rustc. The full GUI cross-build gate is the meta-repo heavy
-    # image build (recipes/gui/eos-notes).
+    # `--no-default-features` is the CLI/selftest half: no Slint, no windowing
+    # backend, so this container needs no display libraries to link.
+    #
+    # CORRECTION, measured 2026-09-03 on rustc 1.98.0 / aarch64-apple-darwin.
+    # The comment that stood here said the GUI "no longer compiles on a modern
+    # host rustc (Slint 1.1.1 + winit 0.28, the Redox-proven pin)". That pin
+    # was replaced by Slint 1.17 in 19e1bb6 and the sentence was never
+    # revisited: `cargo build --locked --release` with default features is
+    # green, in 20m 20s. What was true was narrower and worse — nothing
+    # selected a HOST windowing backend, so the binary compiled, packaged and
+    # ran `--selftest` fine, then panicked the moment a user opened it:
+    #   thread 'main' panicked at src/gui.rs:95:33:
+    #   eos-notes: cannot create the window: No default Slint platform was
+    #   selected, and no Slint platform was initialized
+    # The `host-backend` feature is the fix and the `package` stage below is
+    # where it is exercised.
     - cargo build --locked --no-default-features
     - cargo run --locked --no-default-features -- --selftest
+
+# --------------------------------------------------------------------------
+# package — the per-OS downloads (roadmap PR-008)
+# --------------------------------------------------------------------------
+# These run on `eos-heavy` because that runner is the only one with zig and
+# cargo-zigbuild installed, and the only one whose minutes cannot run out.
+#
+# `packaging/release.sh` is the gate, not the build command. It builds ONE
+# target and then looks at the FILE it produced: `file -b` has to say what the
+# triple implies, and the byte count has to clear a 1 MiB floor, before it will
+# call the result a package. An exit-code check would wave a stub straight
+# through — which is why `--selftest` runs first here: it feeds those two
+# checks fabricated files and proves they still refuse (CLAUDE.md §5.4).
+#
+# Exit codes: 1 = the package is wrong, 2 = the packager could not run.
+.package:
+  stage: package
+  tags:
+    - eos-heavy
+  # `needs: []` DETACHES THIS FROM STAGE ORDERING. Measured on the sibling products
+  # before it was added: the package jobs came back **skipped** — not failed, not passed.
+  # The light-tier jobs run on shared runners that are out of quota, they die in ~0 s, and
+  # GitLab then skips every later stage. A skipped job reads exactly like a job that had
+  # nothing to complain about.
+  needs: []
+  rules:
+    # Merge requests and the default branch only. Two ~20 MB cross builds on
+    # every push to every topic branch is runner time that buys nothing.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  variables:
+    TMPDIR: "/Volumes/EOS-Podman/tmp"
+  before_script:
+    # rustup here is Homebrew's, so cargo is NOT in ~/.cargo/bin — the meta-repository's
+    # `local-gates` job learned that as `cargo: command not found`.
+    - export PATH="$HOME/.cargo/bin:/opt/homebrew/opt/rustup/bin:/opt/homebrew/bin:$PATH"
+    - command -v cargo zig cargo-zigbuild python3 file
+    # A symlink, not CARGO_TARGET_DIR: `release.sh` addresses the binary as
+    # `target/<triple>/release/…` and would otherwise look where the file is not. It has to
+    # leave the default because this runner's internal disk was measured at 96-99 %% full
+    # twice on 2026-09-03 (CLAUDE.md P-16, §21.1), and rusqlite's bundled SQLite makes
+    # these target directories larger than the siblings'.
+    - mkdir -p "$EOS_XBUILD" "$TMPDIR"
+    - rm -rf target dist && ln -s "$EOS_XBUILD" target
+    - bash packaging/release.sh --selftest
+  artifacts:
+    name: "eos-notes-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG"
+    paths:
+      - dist/
+    expire_in: 30 days
+
+# Measured 2026-09-03 on the eos-heavy host: 17m 34s, and the artefact was
+# looked at, not inferred —
+#   release: dist/eos-notes-0.1.0-x86_64-pc-windows-gnu.zip  11786045 bytes
+#            (PE32+ executable (console) x86-64, for MS Windows)
+# The .exe inside is 25 877 504 bytes. rusqlite's bundled SQLite cross-compiles
+# because `cargo zigbuild` hands cc-rs a zig C compiler for the target.
+package-windows:
+  extends: .package
+  variables:
+    TMPDIR: "/Volumes/EOS-Podman/tmp"
+    EOS_XBUILD: "/Volumes/EOS-Podman/xbuild/eos-notes-ci-windows"
+  script:
+    - bash packaging/release.sh x86_64-pc-windows-gnu dist
+
+# WAS KNOWN RED ON A macOS RUNNER, AND THE FIX IT ASKED FOR IS THE FIX THAT LANDED.
+# Kept rather than deleted, because the measurement is what earned the fix. What was
+# measured here on 2026-09-03, exit 101 after 15m 31s:
+#   warning: libsqlite3-sys@0.28.0: Compiler family detection failed due to
+#   error: ToolNotFound: failed to find tool "x86_64-linux-gnu-gcc"
+#   error occurred in cc-rs: failed to find tool "x86_64-linux-gnu-gcc":
+#   No such file or directory (os error 2)
+# The cause was never this repository: `packaging/release.sh` routed only `*windows-gnu`
+# through `cargo zigbuild`, and every other triple took plain `cargo build --target`,
+# which has no C cross-compiler to offer cc-rs for the bundled SQLite. This comment named
+# the remedy — "widen the packager's zigbuild case to `*windows-gnu|*linux-gnu)`" — and
+# that is exactly what the shared template now does, deciding by triple in a `needs_zig`
+# function whose cases `--selftest` exercises without running a build.
+#
+# rusqlite's bundled SQLite is the part most likely to complain about a cross toolchain,
+# and it does not: `cargo zigbuild` hands cc-rs a zig C compiler for the target, which is
+# how the Windows .exe already got its SQLite. The Linux job is therefore expected GREEN;
+# if it is red, that is a defect, not a known limitation, and it carries no
+# `allow_failure` to blur the difference.
+package-linux:
+  extends: .package
+  variables:
+    TMPDIR: "/Volumes/EOS-Podman/tmp"
+    EOS_XBUILD: "/Volumes/EOS-Podman/xbuild/eos-notes-ci-linux"
+  script:
+    - bash packaging/release.sh x86_64-unknown-linux-gnu dist

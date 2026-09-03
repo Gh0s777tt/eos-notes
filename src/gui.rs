@@ -1,5 +1,10 @@
-//! The Slint GUI half of E-OS Notes (Redox-target concern; hosts may build
-//! with `--no-default-features` for the CLI/selftest half only).
+//! The Slint GUI half of E-OS Notes.
+//!
+//! Two windowing platforms, picked at compile time and never both:
+//!   * Redox — the shared E-OS Slint-on-Orbital backend from `eos-ui`;
+//!   * host (Linux/macOS/Windows) — winit, behind the `host-backend` feature.
+//!
+//! `--no-default-features` still builds the CLI/selftest half alone.
 
 use crate::db;
 use slint::{ModelRc, SharedString, VecModel};
@@ -81,8 +86,50 @@ fn clear_editor(win: &MainWindow) {
     win.set_editor_enabled(false);
 }
 
+/// Install the host window backend (winit), when this build has one.
+///
+/// Three mutually exclusive definitions rather than `cfg!` branches inside one
+/// body: the "no backend" arm has to be a plain `Err`, not a diverging block,
+/// or `clippy -D warnings` trips over the `return` in tail position.
+#[cfg(all(feature = "host-backend", not(target_os = "redox")))]
+fn install_host_backend() -> Result<(), String> {
+    let backend = i_slint_backend_winit::Backend::new()
+        .map_err(|e| format!("winit backend unavailable: {e}"))?;
+    slint::platform::set_platform(Box::new(backend))
+        .map_err(|_| "a Slint platform was already installed".to_string())
+}
+
+/// Fail-closed default on a host: nothing was linked in to draw on, so say so.
+///
+/// The alternative is what the pre-`host-backend` binary actually did, measured
+/// 2026-09-03 on rustc 1.98.0: it compiled, packaged, ran `--selftest` fine and
+/// then panicked at the window constructor with "No default Slint platform was
+/// selected, and no Slint platform was initialized". A binary that only fails
+/// once a user double-clicks it is the worst shape this can take.
+#[cfg(all(not(feature = "host-backend"), not(target_os = "redox")))]
+fn install_host_backend() -> Result<(), String> {
+    Err(
+        "built without the `host-backend` feature: no windowing backend is linked in \
+         (rebuild with `--features host-backend` for a host window)"
+            .to_string(),
+    )
+}
+
+/// On Redox the platform is Orbital, installed by `eos_ui::init` below.
+#[cfg(target_os = "redox")]
+fn install_host_backend() -> Result<(), String> {
+    Ok(())
+}
+
 pub fn run() {
-    // Install the shared E-OS Slint-on-Orbital backend + fonts (no-op on host).
+    // Order matters: winit first on a host, then the shared E-OS
+    // Slint-on-Orbital backend + font bootstrap, which is a no-op off Redox.
+    if let Err(err) = install_host_backend() {
+        eprintln!("eos-notes: {err}");
+        // 2, not 1: no defect was found, the check could not run at all —
+        // this binary has no backend to draw on (CLAUDE.md §13.1).
+        std::process::exit(2);
+    }
     eos_ui::init("E-OS Notes");
 
     let database =
